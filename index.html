@@ -123,13 +123,41 @@ body {
 .merge-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Sentence grouping editor */
-.sent-editor-wrap { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
-.sent-group { display: inline-flex; align-items: center; border: 1px solid var(--border-light); border-radius: 5px; padding: 8px 8px 8px 8px; background: var(--bg-item); gap: 4px; position: relative; margin-top: 10px; flex-wrap: wrap; }
-.sent-group.sel { border-color: var(--orange); background: rgba(251,146,60,0.06); }
-.sent-group-label { position: absolute; top: -9px; left: 6px; font-size: 9px; font-family: var(--font-mono); font-weight: 700; color: var(--orange); background: var(--bg-panel); padding: 0 4px; }
+.sent-editor-wrap { display: flex; flex-wrap: wrap; gap: 0; align-items: stretch; }
+.sent-group { display: inline-flex; align-items: center; border: 2px solid var(--border-light); border-radius: 6px; padding: 10px 10px 10px 10px; background: var(--bg-item); gap: 4px; position: relative; margin-top: 14px; flex-wrap: wrap; }
+.sent-group:nth-child(6n+1) { border-left: 3px solid #fb923c; background: rgba(251,146,60,0.05); }
+.sent-group:nth-child(6n+2) { border-left: 3px solid #a855f7; background: rgba(168,85,247,0.05); }
+.sent-group:nth-child(6n+3) { border-left: 3px solid #4a9eff; background: rgba(74,158,255,0.05); }
+.sent-group:nth-child(6n+4) { border-left: 3px solid #34d399; background: rgba(52,211,153,0.05); }
+.sent-group:nth-child(6n+5) { border-left: 3px solid #fbbf24; background: rgba(251,191,36,0.05); }
+.sent-group:nth-child(6n+6) { border-left: 3px solid #f87171; background: rgba(248,113,113,0.05); }
+.sent-group.sel { border-color: var(--orange) !important; background: rgba(251,146,60,0.1) !important; box-shadow: 0 0 0 2px rgba(251,146,60,0.2); }
+.sent-group-label { position: absolute; top: -10px; left: 8px; font-size: 10px; font-family: var(--font-mono); font-weight: 700; color: var(--orange); background: var(--bg-panel); padding: 0 6px; border-radius: 3px; }
 .sent-word { font-family: var(--font-mono); font-size: 14px; color: var(--text); padding: 2px 4px; border-radius: 3px; cursor: default; }
-.sent-break-btn { width: 24px; height: 28px; background: rgba(251,146,60,0.1); border: 1px dashed var(--orange); cursor: pointer; padding: 0; margin: 0; border-radius: 3px; opacity: 0.5; transition: all 0.15s; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--orange); font-family: var(--font-mono); }
-.sent-break-btn:hover { opacity: 1; background: rgba(251,146,60,0.2); }
+
+/* Break button between sentence groups (top view) */
+.sent-break-divider { display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 10px 4px 0 4px; gap: 2px; }
+.sent-break-divider-line { width: 2px; height: 8px; background: var(--red); border-radius: 1px; }
+.sent-break-divider .sent-break-btn { width: 28px; height: 28px; }
+
+/* Break buttons (word-level view) */
+.sent-break-btn { width: 20px; height: 26px; background: rgba(251,146,60,0.08); border: 1px dashed var(--border-light); cursor: pointer; padding: 0; margin: 0; border-radius: 3px; opacity: 0.4; transition: all 0.15s; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); flex-shrink: 0; }
+.sent-break-btn:hover { opacity: 1; background: rgba(251,146,60,0.15); border-color: var(--orange); color: var(--orange); }
+.sent-break-btn.is-break { opacity: 1; width: 28px; height: 26px; background: rgba(248,113,113,0.15); border: 2px solid var(--red); color: var(--red); font-weight: 700; font-size: 12px; box-shadow: 0 0 8px rgba(248,113,113,0.2); }
+.sent-break-btn.is-break:hover { background: rgba(248,113,113,0.3); }
+
+/* Word-level sentence view — add visual break line */
+.word-break-marker { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 0 2px; }
+.word-break-line { width: 2px; height: 100%; min-height: 26px; background: var(--red); border-radius: 1px; opacity: 0.6; }
+.word-sent-label { font-size: 8px; font-family: var(--font-mono); font-weight: 700; color: var(--orange); background: rgba(251,146,60,0.15); padding: 0 4px; border-radius: 2px; white-space: nowrap; margin-bottom: 2px; }
+
+/* Word-level inline: color words by their sentence */
+.sent-word-s0 { color: #fb923c; }
+.sent-word-s1 { color: #a855f7; }
+.sent-word-s2 { color: #4a9eff; }
+.sent-word-s3 { color: #34d399; }
+.sent-word-s4 { color: #fbbf24; }
+.sent-word-s5 { color: #f87171; }
 
 .preview-row { margin-top: 16px; padding: 10px 12px; background: var(--bg-input); border-radius: 6px; font-family: var(--font-mono); font-size: 13px; }
 .preview-arrow { color: var(--text-muted); }

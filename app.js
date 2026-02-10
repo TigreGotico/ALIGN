@@ -116,8 +116,13 @@ function encodeWAV(buf, ss, es) {
 }
 
 function downloadBlob(b, n) {
-  const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = n; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b);
+  a.download = n;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 1000);
 }
 
 // ─── View helpers ───
@@ -442,9 +447,17 @@ function tick() {
 audioEl.addEventListener("ended", () => { isPlaying = false; renderWaveControls(); });
 
 // ─── Word syncing ───
+// Track whether user has manually edited breaks
+let userEditedBreaks = false;
+
 function syncWords() {
-  const textWords = transInput.value.trim().split(/\s+/).filter(Boolean);
+  const rawText = transInput.value;
+  const textWords = rawText.trim().split(/\s+/).filter(Boolean);
   const prev = words;
+  const prevTexts = prev.map(w => w.text).join(" ");
+  const newTexts = textWords.join(" ");
+  const textChanged = prevTexts !== newTexts;
+
   words = textWords.map((text, i) => {
     const existing = prev[i];
     let groups;
@@ -461,15 +474,73 @@ function syncWords() {
   if (selectedWordIdx != null && selectedWordIdx >= words.length)
     selectedWordIdx = words.length > 0 ? words.length - 1 : null;
 
-  // Clean sentence breaks
-  const newBreaks = new Set([0]);
-  for (const b of sentenceBreaks) { if (b > 0 && b < words.length) newBreaks.add(b); }
-  sentenceBreaks = newBreaks;
+  // Auto-detect sentence breaks when text changes AND user hasn't manually edited
+  if (textChanged && words.length > 0) {
+    if (!userEditedBreaks || prev.length === 0) {
+      sentenceBreaks = autoDetectBreaks(rawText, words);
+    } else {
+      // Just clean existing breaks
+      const newBreaks = new Set([0]);
+      for (const b of sentenceBreaks) { if (b > 0 && b < words.length) newBreaks.add(b); }
+      sentenceBreaks = newBreaks;
+    }
+  }
 
   deriveSentences();
   renderAll();
   saveState();
 }
+
+// ─── Smart sentence break detection ───
+function autoDetectBreaks(rawText, wordList) {
+  const breaks = new Set([0]);
+  if (wordList.length === 0) return breaks;
+
+  // Sentence-ending punctuation: .!?;  and also : when followed by newline
+  // We need to map each word back to its position in the raw text to detect what follows it
+  const endPunct = /[.!?;…]$/;
+  const colonEnd = /:$/;
+
+  // Scan raw text to find word positions and what's between them
+  let cursor = 0;
+  const wordPositions = []; // [{start, end}] for each word in raw text
+
+  for (let i = 0; i < wordList.length; i++) {
+    const word = wordList[i].text;
+    const idx = rawText.indexOf(word, cursor);
+    if (idx >= 0) {
+      wordPositions.push({ start: idx, end: idx + word.length });
+      cursor = idx + word.length;
+    } else {
+      wordPositions.push({ start: cursor, end: cursor + word.length });
+      cursor += word.length;
+    }
+  }
+
+  for (let i = 0; i < wordList.length - 1; i++) {
+    const word = wordList[i].text;
+    const between = rawText.slice(wordPositions[i].end, wordPositions[i + 1].start);
+    const hasNewline = /\n/.test(between);
+    const endsWithPunct = endPunct.test(word);
+    const endsWithColon = colonEnd.test(word);
+
+    // Break after sentence-ending punctuation
+    if (endsWithPunct) {
+      breaks.add(i + 1);
+    }
+    // Break after colon if followed by newline
+    else if (endsWithColon && hasNewline) {
+      breaks.add(i + 1);
+    }
+    // Break at newlines (even without punctuation)
+    else if (hasNewline) {
+      breaks.add(i + 1);
+    }
+  }
+
+  return breaks;
+}
+
 transInput.addEventListener("input", syncWords);
 
 // ─── Assignment ───
@@ -512,6 +583,15 @@ function toggleBreak(wordIdx) {
   if (wordIdx <= 0 || wordIdx >= words.length) return;
   if (sentenceBreaks.has(wordIdx)) sentenceBreaks.delete(wordIdx);
   else sentenceBreaks.add(wordIdx);
+  userEditedBreaks = true;
+  deriveSentences();
+  renderAll();
+  saveState();
+}
+
+function redetectBreaks() {
+  sentenceBreaks = autoDetectBreaks(transInput.value, words);
+  userEditedBreaks = false;
   deriveSentences();
   renderAll();
   saveState();
@@ -613,65 +693,102 @@ function renderSentList() {
 }
 
 // ─── Sentence grouping editor ───
+const SENT_CSS_COLORS = ["#fb923c","#a855f7","#4a9eff","#34d399","#fbbf24","#f87171"];
+
 function renderSentEditor() {
   if (words.length === 0) {
     tabSentences.innerHTML = '<div class="empty-state">Enter transcription to define sentence boundaries</div>';
     return;
   }
 
-  // Build visual: words with break buttons between them
-  let html = '<div class="label" style="font-size:10px;margin-bottom:6px">Click \u2702 between words to split/join sentences. Each group becomes a sentence.</div>';
+  const sorted = [...sentenceBreaks].sort((a, b) => a - b);
+
+  // Map each word to its sentence index
+  const wordToSent = new Array(words.length).fill(0);
+  sorted.forEach((breakIdx, bi) => {
+    const nextBreak = bi < sorted.length - 1 ? sorted[bi + 1] : words.length;
+    for (let wi = breakIdx; wi < nextBreak; wi++) wordToSent[wi] = bi;
+  });
+
+  let html = '';
+
+  // ── Top: Sentence groups with colored borders ──
+  html += '<div class="label" style="font-size:10px;margin-bottom:8px">Sentence groups — click a group to select it for alignment</div>';
   html += '<div class="sent-editor-wrap">';
 
   let currentSentIdx = 0;
-  let sentStart = 0;
-
-  // Find sentence boundaries sorted
-  const sorted = [...sentenceBreaks].sort((a, b) => a - b);
-
-  // Render sentence groups
   sorted.forEach((breakIdx, bi) => {
     const nextBreak = bi < sorted.length - 1 ? sorted[bi + 1] : words.length;
     const isSel = currentSentIdx === selectedSentIdx;
-    html += `<div class="sent-group${isSel ? ' sel' : ''}" onclick="selectSent(${currentSentIdx})">`;
-    html += `<span class="sent-group-label">S${currentSentIdx}</span>`;
+    const wordCount = nextBreak - breakIdx;
 
+    html += `<div class="sent-group${isSel ? ' sel' : ''}" onclick="selectSent(${currentSentIdx})">`;
+    html += `<span class="sent-group-label">S${currentSentIdx} \u00b7 ${wordCount}w</span>`;
     for (let wi = breakIdx; wi < nextBreak; wi++) {
       html += `<span class="sent-word">${esc(words[wi].text)}</span>`;
     }
     html += '</div>';
 
-    // Break button between this group and next (if not last)
+    // Break divider between groups
     if (bi < sorted.length - 1) {
-      html += `<button class="sent-break-btn is-break" onclick="event.stopPropagation();toggleBreak(${sorted[bi + 1]})" title="Remove break (merge sentences)">\u2715</button>`;
+      html += `<div class="sent-break-divider">
+        <div class="sent-break-divider-line"></div>
+        <button class="sent-break-btn is-break" onclick="event.stopPropagation();toggleBreak(${sorted[bi + 1]})" title="Remove break (merge sentences)">\u2715</button>
+        <div class="sent-break-divider-line"></div>
+      </div>`;
     }
 
     currentSentIdx++;
   });
-
   html += '</div>';
 
-  // Also show "add break" opportunities — render word-by-word with small buttons
+  // ── Bottom: Word-level view with break toggles ──
   html += '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">';
-  html += '<div class="label" style="font-size:10px;margin-bottom:6px">Word-by-word: click between any two words to add/remove a sentence break</div>';
-  html += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:1px">';
+  html += '<div class="label" style="font-size:10px;margin-bottom:8px">Word-level — click between words to add/remove breaks</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:0;row-gap:6px">';
 
   words.forEach((w, i) => {
     if (i > 0) {
       const isBreak = sentenceBreaks.has(i);
-      html += `<button class="sent-break-btn${isBreak ? ' is-break' : ''}" onclick="toggleBreak(${i})" title="${isBreak ? 'Remove break' : 'Add break here'}">${isBreak ? '\u2715' : '\u2702'}</button>`;
+      if (isBreak) {
+        // Prominent break marker with sentence label
+        html += `<div class="word-break-marker">
+          <span class="word-sent-label">S${wordToSent[i]}</span>
+          <button class="sent-break-btn is-break" onclick="toggleBreak(${i})" title="Remove break">\u2715</button>
+        </div>`;
+      } else {
+        html += `<button class="sent-break-btn" onclick="toggleBreak(${i})" title="Add break here">\u2702</button>`;
+      }
+    } else {
+      // First word always gets a sentence label
+      html += `<span class="word-sent-label" style="margin-right:2px">S0</span>`;
     }
-    html += `<span class="sent-word" style="font-size:13px">${esc(w.text)}</span>`;
+
+    const sentIdx = wordToSent[i];
+    const colorClass = `sent-word-s${sentIdx % 6}`;
+    html += `<span class="sent-word ${colorClass}" style="font-size:13px">${esc(w.text)}</span>`;
   });
 
   html += '</div></div>';
 
-  // Sentence summary
-  html += '<div class="preview-row" style="margin-top:12px"><div class="label" style="font-size:10px;margin-bottom:4px">Sentences (' + sentences.length + ')</div>';
+  // ── Summary ──
+  html += '<div class="preview-row" style="margin-top:12px"><div class="label" style="font-size:10px;margin-bottom:6px">Summary \u00b7 ' + sentences.length + ' sentence' + (sentences.length !== 1 ? 's' : '') + '</div>';
   sentences.forEach((s, i) => {
-    html += `<div style="margin-bottom:4px"><span style="color:var(--orange);font-weight:600">S${i}:</span> <span style="color:var(--text)">${esc(s.text)}</span></div>`;
+    const col = SENT_CSS_COLORS[i % SENT_CSS_COLORS.length];
+    const timeStr = s.startTime != null ? ` \u00b7 ${fmt(s.startTime)}\u2013${fmt(s.endTime)}` : '';
+    html += `<div style="margin-bottom:4px;padding:4px 8px;border-left:3px solid ${col};border-radius:2px">
+      <span style="color:${col};font-weight:700">S${i}</span>
+      <span style="color:var(--text);margin-left:6px">${esc(s.text)}</span>
+      <span style="color:var(--green);font-size:11px">${timeStr}</span>
+    </div>`;
   });
   html += '</div>';
+
+  // ── Auto-detect button ──
+  html += `<div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+    <button class="btn btn-sm btn-orange" onclick="redetectBreaks()">↻ Re-detect from punctuation</button>
+    <span class="wave-info">Re-runs auto-detection from punctuation &amp; newlines</span>
+  </div>`;
 
   tabSentences.innerHTML = html;
 }
@@ -772,23 +889,37 @@ function exportJSON() {
 
 async function exportWordSegments() {
   if (!audioBuffer) return;
-  for (const w of words.filter(w => w.startTime != null && w.endTime != null)) {
+  const aligned = words.filter(w => w.startTime != null && w.endTime != null);
+  if (aligned.length === 0) return;
+  btnExportWords.textContent = "\u2193 Exporting...";
+  btnExportWords.disabled = true;
+  for (let i = 0; i < aligned.length; i++) {
+    const w = aligned[i];
     const ss = Math.floor(w.startTime * audioBuffer.sampleRate);
     const es = Math.floor(w.endTime * audioBuffer.sampleRate);
     downloadBlob(encodeWAV(audioBuffer, ss, es), `word_${w.id}_${w.text}.wav`);
-    await new Promise(r => setTimeout(r, 200));
+    if (i < aligned.length - 1) await new Promise(r => setTimeout(r, 500));
   }
+  btnExportWords.disabled = false;
+  updateExportBtns();
 }
 
 async function exportSentenceSegments() {
   if (!audioBuffer) return;
-  for (const s of sentences.filter(s => s.startTime != null && s.endTime != null)) {
+  const aligned = sentences.filter(s => s.startTime != null && s.endTime != null);
+  if (aligned.length === 0) return;
+  btnExportSents.textContent = "\u2193 Exporting...";
+  btnExportSents.disabled = true;
+  for (let i = 0; i < aligned.length; i++) {
+    const s = aligned[i];
     const ss = Math.floor(s.startTime * audioBuffer.sampleRate);
     const es = Math.floor(s.endTime * audioBuffer.sampleRate);
     const name = s.text.slice(0, 30).replace(/[^a-zA-Z0-9 ]/g, "").replace(/ +/g, "_");
     downloadBlob(encodeWAV(audioBuffer, ss, es), `sent_${s.id}_${name}.wav`);
-    await new Promise(r => setTimeout(r, 200));
+    if (i < aligned.length - 1) await new Promise(r => setTimeout(r, 500));
   }
+  btnExportSents.disabled = false;
+  updateExportBtns();
 }
 
 // ─── LocalStorage persistence ───
@@ -808,6 +939,7 @@ function buildSaveData() {
       groups: w.groups.map(g => ({ graphemes: g.graphemes, ipa: g.ipa })),
     })),
     sentenceBreaks: [...sentenceBreaks],
+    userEditedBreaks,
     sentences: sentences.map(s => ({
       id: s.id, wordStart: s.wordStart, wordEnd: s.wordEnd,
       text: s.text, startTime: s.startTime, endTime: s.endTime,
@@ -888,6 +1020,7 @@ function applyLoadedData(data) {
   sentenceBreaks = new Set([0]);
   if (data.sentenceBreaks && data.sentenceBreaks.length) {
     data.sentenceBreaks.forEach(b => { if (b >= 0 && b < words.length) sentenceBreaks.add(b); });
+    userEditedBreaks = data.userEditedBreaks ?? true;
   } else if (data.sentences && data.sentences.length) {
     // Reconstruct breaks from sentence wordStart indices
     data.sentences.forEach(s => {
