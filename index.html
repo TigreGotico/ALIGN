@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⍼ ALIGN — Audio · Text · IPA Labeler</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-deep: #0c0c14;
+  --bg-panel: #111118;
+  --bg-input: #0c0c14;
+  --bg-item: #16161f;
+  --border: #1e1e2e;
+  --border-light: #2a2a3a;
+  --text: #e0e0e8;
+  --text-dim: #6b6b80;
+  --text-muted: #3a3a50;
+  --accent: #e8a832;
+  --blue: #4a9eff;
+  --green: #34d399;
+  --red: #f87171;
+  --purple: #a855f7;
+  --orange: #fb923c;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--font-sans);
+  line-height: 1.4;
+}
+
+.header {
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.header-title { font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+.header-badge { font-size: 10px; background: rgba(232,168,50,0.12); color: var(--accent); padding: 2px 8px; border-radius: 10px; font-family: var(--font-mono); margin-left: 10px; }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.main { padding: 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+.panel { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.label { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; font-family: var(--font-mono); }
+.work-area { display: grid; grid-template-columns: 340px 1fr; gap: 16px; }
+
+.btn { padding: 6px 14px; border-radius: 5px; border: 1px solid var(--border-light); font-family: var(--font-mono); font-size: 12px; cursor: pointer; font-weight: 600; background: #1a1a24; color: var(--text); transition: all 0.15s; white-space: nowrap; }
+.btn:hover { border-color: var(--text-dim); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--bg-deep); }
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-blue { background: rgba(74,158,255,0.12); border-color: var(--blue); color: var(--blue); }
+.btn-green { background: rgba(52,211,153,0.12); border-color: var(--green); color: var(--green); }
+.btn-red { background: rgba(248,113,113,0.12); border-color: var(--red); color: var(--red); }
+.btn-orange { background: rgba(251,146,60,0.12); border-color: var(--orange); color: var(--orange); }
+.btn-sm { padding: 2px 6px; font-size: 10px; }
+
+.input-area { width: 100%; background: var(--bg-input); border: 1px solid var(--border-light); border-radius: 6px; color: var(--text); font-family: var(--font-mono); font-size: 14px; padding: 10px 12px; resize: vertical; outline: none; min-height: 56px; }
+.input-area:focus { border-color: var(--accent); }
+
+.upload-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 160px; border: 2px dashed var(--border-light); border-radius: 8px; cursor: pointer; color: var(--text-dim); font-size: 14px; gap: 8px; transition: border-color 0.2s; }
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); }
+.upload-zone input { display: none; }
+
+#waveform-canvas { width: 100%; height: 160px; border-radius: 6px; display: block; cursor: crosshair; }
+.wave-controls { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+.wave-info { font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); }
+.sel-info { font-size: 11px; color: var(--blue); font-family: var(--font-mono); }
+
+.minimap-wrap { position: relative; width: 100%; height: 32px; margin-top: 4px; border-radius: 4px; overflow: hidden; background: #0a0a12; border: 1px solid var(--border); cursor: pointer; }
+#minimap-canvas { width: 100%; height: 32px; display: block; }
+.minimap-viewport { position: absolute; top: 0; height: 100%; background: rgba(232,168,50,0.12); border-left: 2px solid var(--accent); border-right: 2px solid var(--accent); pointer-events: none; transition: left 0.05s, width 0.05s; }
+.nav-bar { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; gap: 8px; flex-wrap: wrap; }
+.nav-group { display: flex; align-items: center; gap: 4px; }
+.nav-sep { width: 1px; height: 18px; background: var(--border-light); margin: 0 4px; }
+
+.list-panel { overflow: hidden; display: flex; flex-direction: column; }
+.list-tabs { display: flex; gap: 0; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+.list-tab { padding: 6px 14px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; cursor: pointer; background: transparent; border: none; color: var(--text-dim); border-bottom: 2px solid transparent; transition: all 0.15s; }
+.list-tab:hover { color: var(--text); }
+.list-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.item-list { display: flex; flex-direction: column; gap: 4px; max-height: 460px; overflow-y: auto; }
+.item-list::-webkit-scrollbar { width: 4px; }
+.item-list::-webkit-scrollbar-track { background: transparent; }
+.item-list::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+.list-item { padding: 8px 12px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); background: var(--bg-item); display: flex; align-items: center; justify-content: space-between; transition: all 0.1s; gap: 8px; }
+.list-item:hover { border-color: var(--border-light); }
+.list-item.selected { border-color: var(--accent); background: rgba(232,168,50,0.06); }
+.list-item.selected-sent { border-color: var(--orange); background: rgba(251,146,60,0.06); }
+.item-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.item-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.word-text { font-family: var(--font-mono); font-size: 14px; font-weight: 600; }
+.word-idx { color: var(--text-muted); font-size: 10px; margin-right: 6px; }
+.word-ipa { font-family: var(--font-mono); font-size: 12px; color: var(--blue); }
+.item-time { font-size: 11px; color: var(--green); font-family: var(--font-mono); }
+.item-unaligned { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+.sent-label { font-family: var(--font-mono); font-size: 10px; color: var(--orange); font-weight: 600; }
+.sent-text { font-family: var(--font-mono); font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.list-header { display: flex; justify-content: space-between; }
+
+/* Editor: IPA groups */
+.ipa-editor-row { display: flex; align-items: flex-start; gap: 0; flex-wrap: wrap; }
+.ipa-group { display: flex; flex-direction: column; align-items: center; border: 1px solid var(--border-light); border-radius: 4px; padding: 4px 2px; background: var(--bg-item); min-width: 32px; }
+.ipa-group-chars { display: flex; align-items: center; }
+.ipa-group-char { font-family: var(--font-mono); font-size: 16px; color: var(--text); padding: 2px 3px; letter-spacing: 1px; }
+.ipa-split-bar { width: 2px; height: 20px; background: var(--blue); border: none; cursor: pointer; padding: 0; margin: 0 1px; border-radius: 1px; opacity: 0.4; transition: opacity 0.15s; }
+.ipa-split-bar:hover { opacity: 1; }
+.ipa-group-divider { width: 100%; height: 1px; background: var(--border-light); margin: 4px 0; }
+.ipa-group-input { background: transparent; border: 1px solid var(--border-light); color: var(--blue); font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 2px 4px; border-radius: 3px; outline: none; }
+.ipa-group-input:focus { border-color: var(--blue); }
+.merge-btn { height: 48px; width: 18px; background: transparent; border: 1px dashed var(--text-muted); cursor: pointer; color: var(--text-dim); font-size: 14px; display: flex; align-items: center; justify-content: center; border-radius: 3px; margin: 0 1px; padding: 0; transition: all 0.15s; }
+.merge-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Sentence grouping editor */
+.sent-editor-wrap { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+.sent-group { display: inline-flex; align-items: center; border: 1px solid var(--border-light); border-radius: 5px; padding: 8px 8px 8px 8px; background: var(--bg-item); gap: 4px; position: relative; margin-top: 10px; flex-wrap: wrap; }
+.sent-group.sel { border-color: var(--orange); background: rgba(251,146,60,0.06); }
+.sent-group-label { position: absolute; top: -9px; left: 6px; font-size: 9px; font-family: var(--font-mono); font-weight: 700; color: var(--orange); background: var(--bg-panel); padding: 0 4px; }
+.sent-word { font-family: var(--font-mono); font-size: 14px; color: var(--text); padding: 2px 4px; border-radius: 3px; cursor: default; }
+.sent-break-btn { width: 24px; height: 28px; background: rgba(251,146,60,0.1); border: 1px dashed var(--orange); cursor: pointer; padding: 0; margin: 0; border-radius: 3px; opacity: 0.5; transition: all 0.15s; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--orange); font-family: var(--font-mono); }
+.sent-break-btn:hover { opacity: 1; background: rgba(251,146,60,0.2); }
+
+.preview-row { margin-top: 16px; padding: 10px 12px; background: var(--bg-input); border-radius: 6px; font-family: var(--font-mono); font-size: 13px; }
+.preview-arrow { color: var(--text-muted); }
+.empty-state { color: var(--text-muted); font-size: 13px; text-align: center; padding: 40px; }
+
+.tab-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+.shortcuts-list { color: var(--text-dim); font-size: 13px; line-height: 2.2; font-family: var(--font-mono); }
+.shortcuts-list kbd { color: var(--accent); font-weight: 600; }
+.shortcuts-hint { margin-top: 8px; color: var(--text-muted); }
+
+.audio-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.audio-header-right { display: flex; gap: 6px; align-items: center; }
+
+.ipa-inline-input { background: transparent; border: 1px solid var(--border-light); color: var(--blue); font-family: var(--font-mono); font-size: 11px; padding: 1px 6px; border-radius: 3px; outline: none; width: 80px; }
+.ipa-inline-input:focus { border-color: var(--blue); }
+
+.btn-donate { background: rgba(248,113,113,0.1); border-color: #f87171; color: #f87171; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.btn-donate:hover { background: rgba(248,113,113,0.22); }
+
+.footer { padding: 20px 24px; border-top: 1px solid var(--border); text-align: center; font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); margin-top: 16px; }
+.footer a { color: var(--accent); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+@media (max-width: 900px) { .work-area { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="display:flex;align-items:center">
+    <span class="header-title">⍼ ALIGN</span>
+    <span class="header-badge">audio · text · IPA</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn" onclick="document.getElementById('json-import').click()">↑ Import JSON</button>
+    <input type="file" accept=".json" id="json-import" style="display:none">
+    <span class="nav-sep" style="height:24px"></span>
+    <button class="btn btn-green" onclick="exportJSON()">↓ JSON</button>
+    <button class="btn btn-blue" id="btn-export-words" onclick="exportWordSegments()">↓ Word Segments (0)</button>
+    <button class="btn btn-orange" id="btn-export-sents" onclick="exportSentenceSegments()">↓ Sentence Segments (0)</button>
+    <span class="nav-sep" style="height:24px"></span>
+    <a href="https://www.paypal.me/AnaIsabelFerreira" target="_blank" rel="noopener" class="btn btn-donate">♥ Donate</a>
+    <span class="wave-info" id="save-indicator" style="opacity:0;transition:opacity 0.3s">✓ saved</span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="panel">
+    <div class="audio-header">
+      <div class="label" style="margin-bottom:0">Audio Source</div>
+      <div class="audio-header-right" id="audio-meta"></div>
+    </div>
+    <div id="upload-container">
+      <label class="upload-zone" id="upload-zone">
+        <span style="font-size:28px">🎙</span>
+        <span>Drop audio file or click to upload</span>
+        <input type="file" accept="audio/*" id="file-input">
+      </label>
+    </div>
+    <div id="waveform-container" style="display:none">
+      <canvas id="waveform-canvas"></canvas>
+      <div class="minimap-wrap">
+        <canvas id="minimap-canvas"></canvas>
+        <div id="minimap-viewport" class="minimap-viewport"></div>
+      </div>
+      <div class="nav-bar">
+        <div class="nav-group">
+          <button class="btn btn-sm" onclick="panLeft()">◀</button>
+          <button class="btn btn-sm" onclick="panRight()">▶</button>
+          <span class="nav-sep"></span>
+          <button class="btn btn-sm" onclick="zoomIn()">+</button>
+          <button class="btn btn-sm" onclick="zoomOut()">−</button>
+          <button class="btn btn-sm" onclick="zoomFit()">Fit</button>
+          <button class="btn btn-sm" onclick="zoomSelection()" id="btn-zoom-sel" style="display:none">⌖ Sel</button>
+          <span class="nav-sep"></span>
+          <span class="wave-info" id="zoom-level-label"></span>
+        </div>
+        <div class="nav-group"><span class="wave-info" style="opacity:0.5">Scroll: zoom · Shift+Scroll: pan</span></div>
+      </div>
+      <div class="wave-controls" id="wave-controls"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="label">Transcription</div>
+    <textarea class="input-area" id="transcription-input" placeholder="Type or paste transcription… words separated by spaces" rows="10"></textarea>
+  </div>
+
+  <div class="work-area">
+    <div class="panel list-panel">
+      <div class="list-tabs">
+        <button class="list-tab active" data-ltab="words" onclick="switchListTab('words')">Words</button>
+        <button class="list-tab" data-ltab="sentences" onclick="switchListTab('sentences')">Sentences</button>
+      </div>
+      <div id="list-words">
+        <div class="label list-header"><span id="word-count-label">Words (0)</span><span id="aligned-word-count">0 aligned</span></div>
+        <div class="item-list" id="word-list"><div class="empty-state">Enter transcription above…</div></div>
+      </div>
+      <div id="list-sentences" style="display:none">
+        <div class="label list-header"><span id="sent-count-label">Sentences (0)</span><span id="aligned-sent-count">0 aligned</span></div>
+        <div class="item-list" id="sent-list"><div class="empty-state">Define sentences in the editor →</div></div>
+      </div>
+    </div>
+
+    <div class="panel" id="right-panel">
+      <div class="tab-bar">
+        <button class="btn btn-primary btn-tab" data-tab="sentences" onclick="switchTab('sentences')">Sentences</button>
+        <button class="btn btn-tab" data-tab="ipa" onclick="switchTab('ipa')">IPA ↔ Grapheme</button>
+        <button class="btn btn-tab" data-tab="help" onclick="switchTab('help')">Shortcuts</button>
+      </div>
+      <div id="tab-sentences"><div class="empty-state">Enter transcription to define sentence boundaries</div></div>
+      <div id="tab-ipa" style="display:none"><div class="empty-state">Select a word to edit IPA↔grapheme alignment</div></div>
+      <div id="tab-help" style="display:none">
+        <div class="shortcuts-list">
+          <div><kbd>Space</kbd> — Play / Pause</div>
+          <div><kbd>Enter</kbd> — Assign selection to selected item</div>
+          <div><kbd>↑ / ↓</kbd> — Navigate items in list</div>
+          <div><kbd>Scroll</kbd> on waveform — Zoom at cursor</div>
+          <div><kbd>Shift+Scroll</kbd> — Pan left/right</div>
+          <div><kbd>A / D</kbd> — Pan · <kbd>+ / −</kbd> — Zoom</div>
+          <div><kbd>Home</kbd> — Zoom to fit</div>
+          <div class="shortcuts-hint">Sentence editor: click ✂ between words to toggle sentence breaks.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<audio id="audio-el"></audio>
+
+<footer class="footer">
+  <a href="https://tigregotico.pt/" target="_blank" rel="noopener">Casimiro Ferreira — TigreGótico Lda. 2026</a>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
